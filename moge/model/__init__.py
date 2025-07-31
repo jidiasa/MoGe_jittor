@@ -1,0 +1,1 @@
+from .moge_model_jt import MoGeModel
