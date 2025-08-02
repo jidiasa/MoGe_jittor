@@ -261,8 +261,8 @@ class MoGeModel(nn.Module):
         image_14 = F.interpolate(image, (patch_h * 14, patch_w * 14), mode="bilinear", align_corners=False, antialias=True)
 
         # Get intermediate layers from the backbone
-        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=mixed_precision):
-            features = self.backbone.get_intermediate_layers(image_14, self.intermediate_layers, return_class_token=True)
+        
+        features = self.backbone.get_intermediate_layers(image_14, self.intermediate_layers, return_class_token=True)
 
         # Predict points (and mask)
         output = self.head(features, image)

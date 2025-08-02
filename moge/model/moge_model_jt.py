@@ -75,7 +75,7 @@ class Head(nn.Module):
                  num_features: int,
                  dim_in: int,
                  dim_out,                       
-                 dim_proj: int = 640,
+                 dim_proj: int = 512,
                  dim_upsample=(256, 128, 128),
                  dim_times_res_block_hidden: int = 1,
                  num_res_blocks: int = 1,
@@ -89,50 +89,60 @@ class Head(nn.Module):
             [nn.Conv(dim_in, dim_proj, 1) for _ in range(num_features)]
         )
 
-        ups_in  = [dim_proj] + list(dim_upsample[:-1])
-        ups_out = list(dim_upsample)
-        blocks = []
-        for in_ch, out_ch in zip(ups_in, ups_out):
-            seq = [
-                nn.ConvTranspose(in_ch+2, out_ch, 2, stride=2),  
-                conv2d_pad(out_ch, out_ch, 3, padding_mode='replicate'),
-            ]
-            for _ in range(num_res_blocks):
-                seq.append(
-                    ResidualConvBlock(out_ch, out_ch,
-                                      dim_times_res_block_hidden*out_ch,
-                                      activation='relu',
-                                      norm=res_block_norm)
-                )
-            blocks.append(nn.Sequential(*seq))
-        self.upsample_blocks = nn.ModuleList(blocks)
-
-        if isinstance(dim_out, int):
+        self.upsample_blocks = nn.ModuleList([
+            nn.Sequential(
+                self._make_upsampler(in_ch + 2, out_ch),
+                *[ResidualConvBlock(out_ch, out_ch, dim_times_res_block_hidden * out_ch, activation="relu", norm=res_block_norm) for _ in range(num_res_blocks)]
+            ) for in_ch, out_ch in zip((dim_proj,) + dim_upsample[:-1], dim_upsample)
+        ])
+        if isinstance(dim_out, int):         
             dim_out = [dim_out]
-        out_blocks = []
-        for out_ch in dim_out:
-            seq = [
-                conv2d_pad(ups_out[-1]+2, last_conv_channels, 3, padding_mode='replicate'),
-            ]
-            for _ in range(last_res_blocks):
-                seq.append(
-                    ResidualConvBlock(last_conv_channels, last_conv_channels,
-                                      dim_times_res_block_hidden*last_conv_channels,
-                                      activation='relu', norm=res_block_norm)
-                )
-            seq += [
-                nn.ReLU(),
-                conv2d_pad(last_conv_channels, out_ch, last_conv_size,
-                           padding_mode='replicate'),
-            ]
-            out_blocks.append(nn.Sequential(*seq))
-        self.output_block = nn.ModuleList(out_blocks)
+        elif isinstance(dim_out, (list, tuple)):      
+            dim_out = list(dim_out)
+        self.output_block = nn.ModuleList([
+            self._make_output_block(
+                dim_upsample[-1] + 2,
+                dim_out_,
+                dim_times_res_block_hidden,
+                last_res_blocks,
+                last_conv_channels,
+                last_conv_size,
+                res_block_norm,
+            ) for dim_out_ in dim_out
+        ])
+
+    def _make_upsampler(self, in_c: int, out_c: int):
+        up = nn.ConvTranspose(in_c, out_c, kernel_size=2, stride=2, bias=True)
+        conv = nn.Conv(out_c, out_c, kernel_size=3, stride=1, padding=1)   # ← 去掉 padding_mode
+        # up.weight.assign(up.weight[:, :, :1, :1])
+        return nn.Sequential(up, conv)
+
+    def _make_output_block( 
+        self,
+        dim_in: int,
+        dim_out: int,
+        dim_times_res_block_hidden: int,
+        last_res_blocks: int,
+        last_conv_channels: int,
+        last_conv_size: int,
+        res_block_norm: str
+        ):
+        layers = [
+            nn.Conv(dim_in, last_conv_channels, kernel_size=3, stride=1, padding=1),  # ← same
+            *[ResidualConvBlock(last_conv_channels, last_conv_channels, dim_times_res_block_hidden * last_conv_channels, activation='relu', norm=res_block_norm) for _ in range(last_res_blocks)],
+            nn.ReLU(),
+            nn.Conv(last_conv_channels, dim_out,
+                    kernel_size=last_conv_size,
+                    stride=1,
+                    padding=last_conv_size // 2),
+        ]
+        return nn.Sequential(*layers)
 
     def _add_uv(self, feat, img_h, img_w):
         uv = normalized_view_plane_uv(width=feat.shape[-1],
-                                      height=feat.shape[-2],
-                                      aspect_ratio=img_w/img_h,
-                                      dtype=feat.dtype).to(feat)
+                                        height=feat.shape[-2],
+                                        aspect_ratio=img_w/img_h,
+                                        dtype=feat.dtype).to(feat)
         uv = uv.permute(2,0,1).unsqueeze(0).expand(feat.shape[0], -1, -1, -1)
         return jt.concat([feat, uv], dim=1)
 
@@ -197,7 +207,7 @@ class MoGeModel(nn.Module):
         dim_feature = self.backbone.num_features                 # 768 / 384 …
 
         # ------------ head ------------
-        head_out = 3 if not output_mask else 4 if not split_head else [3,1]
+        head_out = 3 if not output_mask else 4 if output_mask and not split_head else [3, 1]
         self.head = Head(
             num_features=intermediate_layers if isinstance(intermediate_layers,int) else len(intermediate_layers),
             dim_in=dim_feature,

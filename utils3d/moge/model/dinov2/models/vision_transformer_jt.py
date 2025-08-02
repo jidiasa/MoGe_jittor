@@ -63,10 +63,10 @@ class DinoVisionTransformer(nn.Module):
         self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
         num_patches = self.patch_embed.num_patches
 
-        self.cls_token = nn.Parameter(jt.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(jt.zeros(1, num_patches + self.num_tokens, embed_dim))
+        self.cls_token = jt.zeros(1, 1, embed_dim)
+        self.pos_embed = jt.zeros(1, num_patches + self.num_tokens, embed_dim)
         self.register_tokens = (
-            nn.Parameter(jt.zeros(1, num_register_tokens, embed_dim)) if num_register_tokens else None
+            jt.zeros(1, num_register_tokens, embed_dim) if num_register_tokens else None
         )
 
         if drop_path_uniform:
@@ -116,7 +116,7 @@ class DinoVisionTransformer(nn.Module):
         self.norm = norm_layer(embed_dim)
         self.head = nn.Identity()           
 
-        self.mask_token = nn.Parameter(jt.zeros(1, embed_dim))
+        self.mask_token = jt.zeros(1, embed_dim)
 
         self._init_weights()
 

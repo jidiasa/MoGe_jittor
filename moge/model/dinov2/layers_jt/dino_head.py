@@ -34,11 +34,11 @@ def l2_normalize(x: jt.Var, dim: int = -1, eps: float = 1e-12) -> jt.Var:
 class WeightNormLinear(nn.Module):
     def __init__(self, in_dim, out_dim, bias=False):
         super().__init__()
-        self.weight_v = nn.Parameter(jt.randn((out_dim, in_dim)))
-        self.weight_g = nn.Parameter(jt.ones(out_dim))
+        self.weight_v = jt.randn((out_dim, in_dim))
+        self.weight_g = jt.ones(out_dim)
         self.bias = None
         if bias:
-            self.bias = nn.Parameter(jt.zeros(out_dim))
+            self.bias = jt.zeros(out_dim)
 
     def execute(self, x):
         weight = l2_normalize(self.weight_v, dim=1) * self.weight_g.unsqueeze(1)

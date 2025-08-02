@@ -25,7 +25,7 @@ class LayerScale(nn.Module):
         else:
             init_tensor = init_values
 
-        self.gamma = nn.Parameter(init_tensor)
+        self.gamma = init_tensor
 
     def execute(self, x: jt.Var) -> jt.Var:
         return x.multiply(self.gamma) if self.inplace else x * self.gamma

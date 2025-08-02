@@ -2,14 +2,19 @@
 import cv2, numpy as np, jittor as jt
 import jittor.nn as nn
 from moge.model.moge_model_jt import MoGeModel    
+from huggingface_hub import hf_hub_download
 jt.flags.use_cuda = 1
+weight_path  = hf_hub_download(
+    repo_id="Tianhe122/MoGe-jittor",
+    filename="moge_weights_jittor.npz"
+)
 
 model = MoGeModel(encoder="dinov2_vitl14",
                   output_mask=False).cuda()        
 
-npz = np.load("moge_weights_jittor.npz")
+npz = np.load(weight_path) 
 weights = {k: jt.array(v) for k, v in npz.items()}   
-model.load_parameters(weights)                    
+model.load_parameters(weights)                  
 
 img_bgr = cv2.imread("example_images/BooksCorridor.png")
 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
